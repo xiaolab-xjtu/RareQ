@@ -54,6 +54,18 @@ For scRNA-seq, CITE-seq data and cell-segmented spatial data, count matrix is pr
   
 ```
 
+## Tutorial
+We have tutorials to assist you in utilizing RareQ. You can locate these tutorials in the RareQ/Tutorial_example directory of the project. Additionally, we have provided related Dataset to aid you in testing and acquainting yourself with the RareQ functionality:
+
+[Example Datasets](https://zenodo.org/records/17190972/files/Tutorial_example.rar?download=1)
+
+a. The tutorial contains four R scripts encompassing different data modality as follows:
+1. RNA.R:  scRNA-seq data of Jurkat cell line
+2. RNA_ATAC.R:  scRNA-seq + scATAC-seq multiome data from mouse T cells
+3. RNA_ADT.R:  CITE-seq data (containing both RNA and ADT modalities) from human bone marrow mononuclear cells.
+4. Xenium_Spatial.R: Xenium spatial data from 10X Genomics from mouse brain
+
+b. Users need to modify the working directory for successful running.
 
 
 ## Citation
