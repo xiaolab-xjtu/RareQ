@@ -67,6 +67,11 @@ a. The tutorial contains four R scripts encompassing different data modality as 
 
 b. Users need to modify the working directory for successful running.
 
+## Simulation
+We have provided code and data to assist you in generating simulation datasets to benchmark RareQ. You can locate the Python script in the RareQ/Simulation directory of the project. 
+
+[Datasets for simulation](https://zenodo.org/records/17190972/files/simulation.rar?download=1)
+
 
 ## Citation
 
