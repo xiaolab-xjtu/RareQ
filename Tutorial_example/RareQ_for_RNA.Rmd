@@ -1,0 +1,130 @@
+---
+title: "RareQ for scRNA Data"
+output: html_document
+date: "`r paste0('Last edited: ', format(Sys.Date(), '%B %d, %Y'))`"
+---
+
+**RareQ** is a network-propagation-based algorithm designed to identify both **major and rare cell populations** across diverse modalities, including RNA, ADT, ATAC, and spatial data. It operates on the **k-nearest neighbor (kNN)** graph, quantifying local topological structure via a **neighborhood connectivity metric (Q)**.
+
+This tutorial demonstrates the use of **RareQ** on a standard **single-cell RNA-seq dataset**.  
+
+## Load the data
+```{r, message = FALSE,warning = FALSE}
+library(Seurat)
+library(RareQ)    # core method for rare-cell detection
+library(ggplot2)
+
+# Read example data
+# Please replace the path with your local "Tutorial_example" directory
+obj = readRDS('Tutorial_example/data/Jurkat.RDS')
+counts = obj@assays$RNA@counts
+```
+
+## Preprocess the scRNA-seq data
+RareQ operates on the **kNN graph**, therefore standard preprocessing is required. We use **Seurat** for quality control (QC), normalization, highly variable gene (HVG) selection, scaling, PCA and kNN graph construction.
+```{r,message = FALSE,warning = FALSE}
+# Create Seurat object
+sc_object <- CreateSeuratObject(count=counts, project = "sc_object", min.cells = 3)
+
+# Basic QC
+sc_object$percent.mt <- PercentageFeatureSet(sc_object, pattern = "^MT-")
+sc_object <- subset(sc_object, percent.mt<20)
+
+# Normalize, find HVGs and scale data
+sc_object <- NormalizeData(sc_object)
+sc_object <- FindVariableFeatures(sc_object, nfeatures=2000)
+sc_object <- ScaleData(sc_object)
+
+# Dimensionality reduction (50 PCs recommended to retain rare-cell structure)
+sc_object <- RunPCA(sc_object, npcs=50)
+sc_object <- RunUMAP(sc_object, dims=1:50)
+
+# Build the kNN graph
+sc_object <- FindNeighbors(object = sc_object,
+                           k.param = 20,              # k = 20 typical in scRNA workflows
+                           compute.SNN = FALSE,       # RareQ relies on directed kNN, not SNN
+                           prune.SNN = 0,
+                           reduction = "pca",
+                           dims = 1:50,
+                           force.recalc = FALSE,
+                           return.neighbor = TRUE)    # returned neighbor list is essential for Q propagation
+```
+
+## Run RareQ
+RareQ is executed using the `FindRare()` function with the processed Seurat object as input. The function returns the cluster label (major + rare clusters) for each cell.
+```{r}
+cluster <- FindRare(sc_object)
+table(cluster)
+```
+The detailed steps of the RareQ algorithm involve the following: 
+
+- **Q values computing**
+  
+  RareQ defines a local mutual connectivity metric (**Q**) for each cell, quantifying how densely it connects within its k-1 nearest neighbors. 
+  
+  Q ranges from 1⁄k to 1. High-Q cells represent locally dense micro-clusters suggestive of rare states. 
+  
+  The `k` parameter controls the neighborhood size in computing Q values; smaller values enhance sensitivity to extremely rare populations (typically between 5 to the total nearest neighbors, default 6). 
+
+- **Q-guided label propagation**
+  
+  Each cell is initially treated as a singleton cluster. 
+  
+  Cells iteratively adopt the label of the highest-Q neighbor until convergence or maximum number of iterations (`max_iter`) completing, ensuring that labels propagate outward from “waypoint” cells (local Q maxima). 
+  
+  A subsequent majority-vote refinement stabilizes cluster boundaries.
+  
+  The `max_iter` parameter sets the maximum number of iterations for propagation if convergence is not reached (default 100).
+
+- **Recursive cluster merging**
+  
+  Clusters with high average Q (> `Q_cut`) are retained as rare clusters. 
+  
+  Remaining clusters are iteratively merged if 
+  
+  - their internal connectivity improves upon merging (Q~c~ of the merged cluster > each component); 
+  
+  - the proportion of inter-cluster connections exceeds `ratio`. 
+  
+  This prevents overfragmentation of major cell types.
+
+  The `Q_cut` value specifies the minimum average Q for a cluster to be retained as a rare group (0.5-1.0, default 0.6).
+
+  `Ratio` sets the threshold for merging clusters (default 0.2). When the proportion of a cluster's connections with its neighboring clusters among its total connections is larger than this threshold, merge the two cell groups. 
+
+
+The function `ComputeQ()` can be used independently to visualize Q values for each cell. This is useful for understanding the landscape of rare vs major cell states.
+```{r, eval=FALSE}
+ComputeQ(
+  sc_object,
+  assay='RNA',
+  k=6
+)
+```
+
+Attach the identified cluster labels to Seurat metadata.
+```{r}
+sc_object$cluster = cluster
+```
+
+## Visualization
+```{r}
+# Label cluster according to cluster size
+cluster.cnt <- sort(table(sc_object$cluster))
+sc_object$cluster_sort = factor(as.character(sc_object$cluster), levels = names(cluster.cnt), 
+                                labels = 1:length(cluster.cnt), ordered = TRUE)
+
+# Define color palette for visualization
+cols <- c("#532C8A","#c19f70","#f9decf","#c9a997","#B51D8D","#9e6762","#3F84AA","#F397C0",
+          "#C594BF","#DFCDE4","#eda450","#635547","#C72228","#EF4E22","#f77b59","#989898",
+          "#7F6874","#8870ad","#65A83E","#EF5A9D","#647a4f","#FBBE92","#354E23","#139992",
+          "#C3C388","#8EC792","#0F4A9C","#8DB5CE","#1A1A1A","#FACB12","#C9EBFB","#DABE99",
+          "#ed8f84","#005579","#CDE088","#BBDCA8","#F6BFCB"
+)
+
+getPalette = colorRampPalette(cols[c(2,3,1,5,6,7,8,9,11,12,13,14,16,18,19,20,22,23,24,27,28,29,30,31,34)])
+
+# UMAP visualization of RareQ-identified clusters
+DimPlot(sc_object, group.by='cluster_sort') +
+  scale_color_manual(values = getPalette(length(unique(sc_object$cluster_sort))))
+```

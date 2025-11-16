@@ -1,0 +1,99 @@
+---
+title: "RareQ for Xenium Spatial Data"
+output: html_document
+date: "`r paste0('Last edited: ', format(Sys.Date(), '%B %d, %Y'))`"
+---
+
+This tutorial demonstrates how to apply **RareQ** to data generated from the **10x Xenium In Situ** platform. The example dataset is from a mouse brain coronal section.
+
+## Load the data
+```{r, message = FALSE,warning = FALSE}
+library(Seurat)
+library(RareQ)   # core method for rare-cell detection
+library(dplyr)
+library(ggplot2)
+
+# Read example data
+# Please replace the path with your local "Tutorial_example" directory
+dat = readRDS('Tutorial_example/data/Xenium_Mouse_brain.RDS')
+count = dat@assays$RNA@counts      # raw gene × cell matrix
+meta.info = dat@meta.data          # Xenium metadata (coordinates, QC metrics, etc.)
+```
+
+## Preprocess the Xenium data
+We preprocess, perform dimensional reduction and calculate cell neighborhoods using standard workflows for data produced by the Xenium platform. Xenium uses targeted spatial transcriptomics panels, typically measuring hundreds rather than thousands of genes, which results in unique preprocessing considerations compared with scRNA-seq or multiome datasets.
+```{r,message = FALSE,warning = FALSE}
+# Create Seurat object
+sc_object <- CreateSeuratObject(count=count, project = "sc_object", min.cells = 3)
+
+# Normalize and scale data
+sc_object <- NormalizeData(sc_object, scale.factor = 80)  # lower scale factor suited for low-gene Xenium data
+sc_object <- ScaleData(sc_object)
+
+# Dimensional reduction
+sc_object <- RunPCA(sc_object, 
+                    features = dimnames(sc_object)[[1]],  # use all features for dimensional reduction
+                    npcs = 50)
+
+# Build the kNN graph
+sc_object <- FindNeighbors(object = sc_object,
+                           k.param = 20,
+                           compute.SNN = FALSE,      # RareQ relies on directed kNN, not SNN
+                           prune.SNN = 0,
+                           reduction = "pca",
+                           dims = 1:20,
+                           force.recalc = FALSE, 
+                           return.neighbor = TRUE)   # returned neighbor list is essential for Q propagation
+```
+
+## Run RareQ
+Now we use `RareQ::FindRare()` to derive both major and rare cell clusters, and store the identified cluster labels to Seurat metadata.
+```{r}
+cluster <- FindRare(sc_object)
+table(cluster)
+```
+
+```{r}
+sc_object$cluster = cluster 
+sc_object$X = meta.info$X    # spatial coordinate X from Xenium
+sc_object$Y = meta.info$Y    # spatial coordinate Y from Xenium
+```
+
+## Visualization
+```{r}
+# Define color palette for visualization
+cols <- c("#532C8A","#c19f70","#f9decf","#c9a997","#B51D8D","#9e6762","#3F84AA","#F397C0",
+          "#C594BF","#DFCDE4","#eda450","#635547","#C72228","#EF4E22","#f77b59","#989898",
+          "#7F6874","#8870ad","#65A83E","#EF5A9D","#647a4f","#FBBE92","#354E23","#139992",
+          "#C3C388","#8EC792","#0F4A9C","#8DB5CE","#1A1A1A","#FACB12","#C9EBFB","#DABE99",
+          "#ed8f84","#005579","#CDE088","#BBDCA8","#F6BFCB"
+)
+
+getPalette = colorRampPalette(cols[c(2,3,1,5,6,7,8,9,11,12,13,14,16,18,19,20,22,23,24,27,28,29,30,31,34)])
+
+# Spatial scatterplot
+cluster.df = sc_object@meta.data
+p.cluster <- ggplot(data = cluster.df) + geom_point(aes(x = X, y = Y, color=factor(cluster)), size=0.001) +
+  theme_bw() + theme_minimal() +
+  theme(panel.grid = element_blank(), legend.position = 'none',
+        axis.text = element_blank(),
+        axis.title = element_blank()) +
+  scale_color_manual(values = getPalette(length(unique(cluster.df$cluster))))
+p.cluster
+```
+
+
+## Example: CA2
+We applied RareQ to the dataset and successfully recovered the CA2 population—a hippocampal subregion that was not detected in the original analysis. CA2 may appear with the same color with its neighboring CA3 region in the cluster-level spatial plot (`p.cluster`). Users can check it with the reference cluster `82936` in dat.
+```{r}
+cnt = table(cluster[dat$cluster==82936])
+cnt
+```
+
+```{r}
+# Plot CA2 region
+plot(cluster.df$X, cluster.df$Y, cex=0.1,
+     col=ifelse(cluster.df$cluster==names(cnt)[which.max(cnt)],'red','grey'))
+```
+
+

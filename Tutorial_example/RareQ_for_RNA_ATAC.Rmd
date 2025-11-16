@@ -1,0 +1,146 @@
+---
+title: "RareQ for scRNA & scATAC Multiome Data"
+output: html_document
+date: "`r paste0('Last edited: ', format(Sys.Date(), '%B %d, %Y'))`"
+---
+
+This tutorial demonstrates how to apply **RareQ** to a paired **scRNA-seq + scATAC-seq** dataset, using **Seurat** + **Signac** for preprocessing and multimodal integration.  
+
+
+## Load the data
+```{r, message = FALSE,warning = FALSE}
+library(Seurat)
+library(Signac)
+library(RareQ)   # core method for rare-cell detection
+library(dplyr)
+library(ggplot2)
+library(GenomicRanges)
+
+# Read example data
+# Please replace the path with your local "Tutorial_example" directory
+dat = readRDS('Tutorial_example/data/Mouse_gdT.RDS')  
+```
+This dataset contains both gene expression matrix (`dat$RNA`) and ATAC peak accessibility matrix (`dat$Peaks`) from mouse T cells. If your ATAC peak names don't match `chr:start-end`, adapt the parsing below.
+
+## Build Seurat object and add assays
+We first create a Seurat object for RNA and then add ATAC as a ChromatinAssay so both modalities are contained in one Seurat object.
+```{r,message = FALSE,warning = FALSE}
+sc_object <- CreateSeuratObject(count = dat$RNA, project = "sc_object", min.cells = 3)
+```
+
+Now build a `GRanges` for ATAC peaks and add a ChromatinAssay.
+```{r,message = FALSE,warning = FALSE}
+ATAC <- dat$Peaks       # peak-by-cell matrix
+n_peaks <- dim(ATAC)[1]
+
+# Extract genomic ranges from peak names
+seqnames = sapply(strsplit(dimnames(ATAC)[[1]], ':', fixed = T), '[', 1)    # extract chromosome
+range.info = sapply(strsplit(dimnames(ATAC)[[1]], ':', fixed = T), '[', 2)  # extract coordinate string "start-end"
+
+# Construct a GRanges object (provide genomic coordinates for each ATAC peak)
+random_gr <- GRanges(
+  seqnames = seqnames,      # chromosome names
+  ranges = IRanges(
+    start = as.integer(sapply(strsplit(range.info, '-', fixed = T), '[', 1)),   # start coordinate
+    end = as.integer(sapply(strsplit(range.info, '-', fixed = T), '[', 2))      # end coordinate
+  ),
+  strand = "*",
+  score = rnorm(n_peaks, mean = 10, sd = 2)  # placeholder peak scores (replace if you have real peak metrics)
+)
+```
+
+```{r,message = FALSE,warning = FALSE}
+# Create a ChromatinAssay for ATAC data
+chrom_assay <- CreateChromatinAssay(
+  counts = ATAC,         # peak x cell counts
+  ranges = random_gr,    # genomic coordinates for peaks
+  genome = "mm10",       # set genome; change to "hg38" etc. as appropriate
+  assay = "Peak"
+)
+
+# Add ATAC assay to the Seurat object
+sc_object[["ATAC"]] <- chrom_assay
+```
+
+## Preprocess RNA and ATAC modalities
+We preprocess and perform dimensionality reduction on both assays independently using standard workflows for RNA and ATAC-seq data.
+```{r,message = FALSE,warning = FALSE}
+# RNA processing
+DefaultAssay(sc_object) <- "RNA"
+sc_object <- NormalizeData(sc_object) %>% FindVariableFeatures() %>% ScaleData() %>% RunPCA()
+
+# ATAC processing
+DefaultAssay(sc_object) <- "ATAC"
+sc_object <- RunTFIDF(sc_object)
+sc_object <- FindTopFeatures(sc_object, min.cutoff = 'q0')  # retain non-zero peaks for LSI
+sc_object <- RunSVD(sc_object)
+```
+The first SVD component is excluded downstream as it typically correlates with sequencing depth.
+
+## Integrate modalities with WNN
+WNN creates a multimodal neighbor graph by combining RNA and ATAC similarities and learning per-cell modality weights.
+```{r,message = FALSE,warning = FALSE}
+sc_object <- FindMultiModalNeighbors(
+  sc_object, 
+  reduction.list = list("pca", "lsi"),    # use RNA PCs and ATAC LSI components
+  dims.list = list(1:50, 2:50)            # use RNA PCs 1:50 and ATAC LSI 2:50 (exclude LSI 1)
+  )
+```
+
+```{r,message = FALSE,warning = FALSE}
+# Run UMAP based on the integrated WNN graph
+sc_object <- RunUMAP(sc_object, nn.name = "weighted.nn", 
+                     reduction.name = "wnn.umap",reduction.key = "wnnUMAP_")
+```
+
+## Build the kNN graph
+`RunSPCA()` creates principal components that maximize agreement between RNA distances and the WNN neighbor structure. These sPCA components will be used to build the final kNN graph for RareQ.
+```{r,message = FALSE,warning = FALSE}
+# Compute sPCA embedding guided by the WNN graph
+sc_object <- RunSPCA(sc_object, assay = 'RNA', graph = 'wsnn')
+```
+Then calculate cell neighborhoods in the sPCA space.
+```{r,message = FALSE,warning = FALSE}
+sc_object <- FindNeighbors(object = sc_object,
+                      k.param = 20,
+                      compute.SNN = FALSE,
+                      prune.SNN = 0,
+                      reduction = "spca",
+                      dims = 1:50,
+                      force.recalc = FALSE, 
+                      return.neighbor = TRUE)
+```
+
+## Run RareQ
+Now we use `RareQ::FindRare()` to derive both major and rare cell clusters, and attach the identified cluster labels to Seurat metadata.
+```{r}
+cluster <- FindRare(sc_object)
+table(cluster)
+```
+
+```{r}
+sc_object$cluster = cluster
+```
+
+## Visualization
+```{r}
+# Label cluster according to cluster size
+cluster.cnt <- sort(table(sc_object$cluster))
+sc_object$cluster_sort = factor(as.character(sc_object$cluster), levels=names(cluster.cnt), 
+                                labels = 1:length(cluster.cnt), ordered = T)
+
+# Define color palette for visualization
+cols <- c("#532C8A","#c19f70","#f9decf","#c9a997","#B51D8D","#9e6762","#3F84AA","#F397C0",
+          "#C594BF","#DFCDE4","#eda450","#635547","#C72228","#EF4E22","#f77b59","#989898",
+          "#7F6874","#8870ad","#65A83E","#EF5A9D","#647a4f","#FBBE92","#354E23","#139992",
+          "#C3C388","#8EC792","#0F4A9C","#8DB5CE","#1A1A1A","#FACB12","#C9EBFB","#DABE99",
+          "#ed8f84","#005579","#CDE088","#BBDCA8","#F6BFCB"
+)
+
+getPalette = colorRampPalette(cols[c(2,3,1,5,6,7,8,9,11,12,13,14,16,18,19,20,22,23,24,27,28,29,30,31,34)])
+
+# UMAP visualization of RareQ-identified clusters based on WNN embedding
+DimPlot(sc_object, group.by='cluster_sort', reduction = 'wnn.umap') +
+  scale_color_manual(values = getPalette(length(unique(sc_object$cluster_sort))))
+```
+

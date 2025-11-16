@@ -1,0 +1,114 @@
+---
+title: "RareQ for RNA & ADT Multiome Data"
+output: html_document
+date: "`r paste0('Last edited: ', format(Sys.Date(), '%B %d, %Y'))`"
+---
+
+
+**RareQ** operates on any Seurat object with a neighborhood graph and can integrate multimodal data. This tutorial demonstrates how to identify rare cell populations in **CITE-seq data** using RareQ, within Seurat's multimodal analysis framework. 
+
+The example dataset (`bmcite`) contains paired RNA and ADT profiles from human bone marrow mononuclear cells. The data and preprocessing steps can be found at <https://satijalab.org/seurat/articles/weighted_nearest_neighbor_analysis>.
+
+## Load the data
+```{r, message = FALSE,warning = FALSE}
+library(Seurat)
+library(RareQ)   # core method for rare-cell detection
+library(dplyr)
+library(ggplot2)
+
+# Read example data
+# Please replace the path with your local "Tutorial_example" directory
+bm = readRDS('Tutorial_example/data/bmcite.RDS')
+```
+
+## Preprocess RNA and ADT modalities separately
+Each modality is normalized and dimensionally reduced independently. RNA features capture transcriptional programs, while ADT features reflect surface protein abundance.
+```{r}
+Assays(bm)
+```
+
+```{r,message = FALSE,warning = FALSE}
+# RNA processing
+DefaultAssay(bm) <- 'RNA'
+bm <- NormalizeData(bm) %>% FindVariableFeatures() %>% ScaleData() %>% RunPCA()
+
+# ADT processing
+DefaultAssay(bm) <- 'ADT'
+VariableFeatures(bm) <- rownames(bm[["ADT"]])           # use all ADT features for dimensional reduction
+bm <- NormalizeData(bm, normalization.method = 'CLR', margin = 2) %>%
+  ScaleData() %>% 
+  RunPCA(reduction.name = 'apca')       # run PCA for ADT modality
+``` 
+
+## Integrate modalities with WNN
+The **Weighted Nearest Neighbor (WNN)** is an unsupervised framework for combining multiple modalities measured within the same cell. It assigns cell-specific weights to each modality according to its relative information content and generated a unified low-dimensional embedding that retains modality-specific signals.
+Here, we use WNN to integrate RNA and protein modalities in CITE-seq data. Note that it can also be applied to joint analysis of scRNA-seq and scATAC-seq data.
+```{r,message = FALSE,warning = FALSE}
+bm <- FindMultiModalNeighbors(
+  bm, 
+  reduction.list = list("pca", "apca"),          # use PCA results from RNA and ADT
+  dims.list = list(1:30, 1:18),                  # specify number of PCs per modality
+  modality.weight.name = "RNA.weight"
+  )
+```
+
+```{r,message = FALSE,warning = FALSE}
+# Run UMAP based on the integrated WNN graph
+bm <- RunUMAP(bm, nn.name = "weighted.nn", 
+              reduction.name = "wnn.umap", reduction.key ="wnnUMAP_")
+```
+
+## Build the kNN graph
+RareQ requires a structure-preserving embedding in which local distances reflect multimodal cell relationships. We obtain this by applying supervised PCA (sPCA) based on the WNN graph: sPCA learns a linear projection of a single modality (here RNA) whose principal components reproduce the neighbor topology defined by the multimodal WNN graph. 
+```{r,message = FALSE,warning = FALSE}
+DefaultAssay(bm) = 'RNA'
+
+# Compute sPCA embedding guided by the WNN graph
+bm <- RunSPCA(bm, assay = 'RNA', graph = 'wsnn')
+```
+
+Then, compute cell neighborhoods. The `k.param` (default 20) nearest neighbors for each cell were determined based on Euclidean distances in the low-dimensional sPCA space.
+```{r,message = FALSE,warning = FALSE}
+# These will serve as the input graph for RareQ
+bm <- FindNeighbors(object = bm,
+                    k.param = 20,
+                    compute.SNN = FALSE,       # RareQ relies on directed kNN, not SNN
+                    prune.SNN = 0,
+                    reduction = "spca",    
+                    dims = 1:50,
+                    force.recalc = FALSE, 
+                    return.neighbor = TRUE)    # returned neighbor list is essential for Q propagation
+```
+
+## Run RareQ
+Now we use `RareQ::FindRare()` to derive both major and rare cell clusters, and attach the identified cluster labels to Seurat metadata.
+```{r}
+cluster = FindRare(sc_object = bm)
+table(cluster)
+```
+
+```{r}
+bm$cluster = cluster
+```
+
+## Visualization
+```{r}
+# Label cluster according to cluster size
+cluster.cnt <- sort(table(bm$cluster))
+bm$cluster_sort = factor(as.character(bm$cluster), levels=names(cluster.cnt), 
+                         labels = 1:length(cluster.cnt), ordered = T)
+
+# Define color palette for visualization
+cols <- c("#532C8A","#c19f70","#f9decf","#c9a997","#B51D8D","#9e6762","#3F84AA","#F397C0",
+          "#C594BF","#DFCDE4","#eda450","#635547","#C72228","#EF4E22","#f77b59","#989898",
+          "#7F6874","#8870ad","#65A83E","#EF5A9D","#647a4f","#FBBE92","#354E23","#139992",
+          "#C3C388","#8EC792","#0F4A9C","#8DB5CE","#1A1A1A","#FACB12","#C9EBFB","#DABE99",
+          "#ed8f84","#005579","#CDE088","#BBDCA8","#F6BFCB"
+)
+
+getPalette = colorRampPalette(cols[c(2,3,1,5,6,7,8,9,11,12,13,14,16,18,19,20,22,23,24,27,28,29,30,31,34)])
+
+# UMAP visualization of RareQ-identified clusters based on WNN embedding
+DimPlot(bm, group.by='cluster_sort', reduction = 'wnn.umap') +
+  scale_color_manual(values = getPalette(length(unique(bm$cluster_sort))))
+```
