@@ -59,13 +59,12 @@ We have tutorials to assist you in utilizing RareQ. You can locate these tutoria
 
 [Example Datasets](https://zenodo.org/records/17190972/files/Tutorial_example.rar?download=1)
 
-a. The tutorial contains four R scripts encompassing different data modality as follows:
-1. RNA.R:  scRNA-seq data of Jurkat cell line
-2. RNA_ATAC_Multiome.R:  scRNA-seq + scATAC-seq multiome data from mouse T cells
-3. RNA_ADT_Multiome.R:  CITE-seq data (containing both RNA and ADT modalities) from human bone marrow mononuclear cells.
-4. Xenium_Spatial.R: Xenium spatial data from 10X Genomics from mouse brain
+The tutorial contains four R scripts encompassing different data modality as follows:
+1. [scRNA_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/scRNA_analysis.html): RareQ analysis of scRNA-seq data from Jurkat cell line
+2. [scRNA_scATAC_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/scRNA_scATAC_analysis.html): RareQ analysis of scRNA-seq + scATAC-seq multiome data from mouse T cells
+3. [scRNA_ADT_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/scRNA_ADT_analysis.html): RareQ analysis of CITE-seq data (containing both RNA and ADT modalities) from human bone marrow mononuclear cells.
+4. [Xenium_spatial_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/Xenium_spatial_analysis.html): RareQ analysis of Xenium spatial data from 10X Genomics from mouse brain
 
-b. Users need to modify the working directory for successful running.
 
 ## Simulation
 We have provided code and data to assist you in generating simulation datasets to benchmark RareQ. You can locate the Python script in the RareQ/Simulation directory of the project. 
