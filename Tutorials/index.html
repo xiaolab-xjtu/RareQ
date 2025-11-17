@@ -24,7 +24,7 @@
     <script>
         // 自动读取同级目录所有 .html 文件（GitHub Pages 环境下有效）
         // 如果你用的是 docs/ 文件夹方式，把路径改成 "./" 即可
-        fetch('./?nocache=' + Date.now())
+        fetch('./' + Date.now())
             .then(r => r.text())
             .then(html => {
                 const parser = new DOMParser();
