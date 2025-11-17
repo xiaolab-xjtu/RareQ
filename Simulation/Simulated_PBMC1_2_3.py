@@ -61,7 +61,7 @@ torch.cuda.manual_seed(seed)
 
 ## Sim-PBMC 1-3
 
-os.chdir('/data/Home/fabotao/Projects/Rare_cell/data/PBMCs/')
+os.chdir('./Simulation/')
 
 pbmc = sc.read_h5ad('GSE194122_openproblems_neurips2021_multiome_BMMC_processed.h5ad')
 cell_type = pbmc.obs
