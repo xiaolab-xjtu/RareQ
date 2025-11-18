@@ -101,7 +101,7 @@ a. The tutorial contains four R scripts encompassing different data modality as 
 4. [Xenium_spatial_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/Xenium_spatial_analysis.html): RareQ analysis of Xenium spatial data from 10X Genomics from mouse brain
 
 b. (Optional) The tutorial for ConsensusRare is as follows:
-1. [scRNA_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/scRNA_analysis.html): ConsensusRare analysis of scRNA-seq data from Jurkat cell line
+1. [scRNA_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/Consensus_Tutorial.html): ConsensusRare analysis of scRNA-seq data from Jurkat cell line
 
 ## Simulation
 We have provided code and data to assist you in generating simulation datasets to benchmark RareQ. You can locate the Python script in the RareQ/Simulation directory of the project. 
