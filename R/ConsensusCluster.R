@@ -76,6 +76,7 @@ ConsensusRare <- function(sc_object, assay='RNA', reduction='pca', dims=1:50, k.
 
     sc_object_shuffle = sc_object
     sc_object_shuffle@reductions[[reduction]]@cell.embeddings = sc_object@reductions[[reduction]]@cell.embeddings[shuffled_idx,]
+    rownames(sc_object_shuffle@reductions[[reduction]]@cell.embeddings) = rownames(sc_object@reductions[[reduction]]@cell.embeddings)
     sc_object_shuffle = FindNeighbors(sc_object_shuffle,
                                       reduction=reduction,
                                       k.param = k.param,
