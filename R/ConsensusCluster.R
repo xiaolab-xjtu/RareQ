@@ -64,12 +64,13 @@
 ConsensusRare <- function(sc_object, assay='RNA', reduction='pca', dims=1:50, k.param=20, k=6, Q_cut=0.6, ratio=0.2, reps=30, user_num=NULL){
 
   # Step1: Run FindRare on shuffled data for multiple times and save results
+  print('1. Start data shuffling:')
   n = dim(sc_object)[2]
   cluster_results <- matrix(NA, nrow = n, ncol = reps)
 
   cluster.num = c()
   for (r in 1:reps) {
-
+	print(paste0('Data shuffling: ', r))
     set.seed(2^r)
     shuffled_idx <- sample(x = 1:n, size = n, replace = FALSE)
 
@@ -82,7 +83,8 @@ ConsensusRare <- function(sc_object, assay='RNA', reduction='pca', dims=1:50, k.
                                       prune.SNN = 0,
                                       dims = dims,
                                       force.recalc = T,
-                                      return.neighbor = T)
+                                      return.neighbor = T,
+									  verbose = F)
 
     cluster_r <- FindRare(sc_object = sc_object_shuffle,
                                      assay = assay,
@@ -95,6 +97,7 @@ ConsensusRare <- function(sc_object, assay='RNA', reduction='pca', dims=1:50, k.
   }
 
   # Step2: construct consensus matrix
+  print("2. Build consensus matrix")
   consensus_matrix <- matrix(0, nrow = n, ncol = n)
   for (i in 1:(n-1)) {
     for (j in (i+1):n) {
@@ -111,7 +114,7 @@ ConsensusRare <- function(sc_object, assay='RNA', reduction='pca', dims=1:50, k.
   diag(consensus_matrix) <- 1
 
   # Step3: clustering based on consensus matrix
-
+  print('3. Output final cluster')
   freq <- table(cluster_num)
   cluster.num = as.integer(names(freq)[freq == max(freq)])
   print(paste0("The most frequent cluster numbers are: ", cluster.num))

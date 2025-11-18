@@ -17,14 +17,14 @@ RareQ (R package) is a network-propagation-based algorithm for rare cell type id
 ```
 
 ## Usage
-For scRNA-seq, CITE-seq data and cell-segmented spatial data, count matrix is preprocessed by Seurat package
+Example [Jurkat](https://github.com/fabotao/RareQ/blob/main/data/Jurkat.RDS) scRNA-seq data for demonstration
 
 ```R
   library(RareQ)
   library(Seurat) 
   
   # Read example data
-  obj = readRDS('data/Jurkat.RDS)  # Example data from data folder
+  obj = readRDS('Jurkat.RDS)  # Example data from data folder
   counts = obj@assays$RNA@counts
   
   # Preprocessing scRNA-seq data
@@ -59,11 +59,14 @@ We have tutorials to assist you in utilizing RareQ. You can locate these tutoria
 
 [Example Datasets](https://zenodo.org/records/17190972/files/Tutorial_example.rar?download=1)
 
-The tutorial contains four R scripts encompassing different data modality as follows:
+a. The tutorial contains four R scripts encompassing different data modality as follows:
 1. [scRNA_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/scRNA_analysis.html): RareQ analysis of scRNA-seq data from Jurkat cell line
 2. [scRNA_scATAC_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/scRNA_scATAC_analysis.html): RareQ analysis of scRNA-seq + scATAC-seq multiome data from mouse T cells
 3. [scRNA_ADT_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/scRNA_ADT_analysis.html): RareQ analysis of CITE-seq data (containing both RNA and ADT modalities) from human bone marrow mononuclear cells.
 4. [Xenium_spatial_analysis](https://xiaolab-xjtu.github.io/RareQ/Tutorials/Xenium_spatial_analysis.html): RareQ analysis of Xenium spatial data from 10X Genomics from mouse brain
+
+b. Though the main function **FindRare** are robust to data shuffling, we also provide a helper function **ConsensusRare** which runs FindRare on shuffled datasets to derived more robust result via consensus clustering.
+
 
 
 ## Simulation
