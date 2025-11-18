@@ -54,7 +54,7 @@ Example [Jurkat](https://github.com/fabotao/RareQ/blob/main/data/Jurkat.RDS) scR
 
 ### (Optional)
 Though deterministic label propagation in **RareQ** has demonstrated high robustness to data shuffling, we also provide a helper function **ConsensusRare** which runs FindRare on multiple shuffled datasets to derived more robust result via consensus clustering. 
-**Attention:**It takes more time than FindRare function and is less memory efficient for large datasets due to confusion matrix.
+**Attention:** It takes more time than FindRare function and is less memory efficient for large datasets due to confusion matrix.
 
 ```R
   library(RareQ)
