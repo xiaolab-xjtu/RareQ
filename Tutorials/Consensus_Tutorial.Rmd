@@ -1,0 +1,88 @@
+---
+title: "RareQ::ConsensusRare()"
+output: html_document
+date: "`r paste0('Last edited: ', format(Sys.Date(), '%B %d, %Y'))`"
+---
+
+`ConsensusRare()` provides a robust extension of the RareQ framework by running `FindRare()` repeatedly on multiple shuffled versions of the dataset, aggregating the results into a stable consensus clustering. This process reduces noise-driven fluctuations and yields more stable and reproducible results.
+
+The following tutorial demonstrates how to incorporate `ConsensusRare()` into a typical scRNA-seq workflow.
+
+
+## Load the data
+```{r, eval=FALSE}
+library(Seurat)
+library(RareQ)
+library(ggplot2)
+
+# Read example data
+# Please replace the path with your local "Tutorial_example" directory
+obj = readRDS('Tutorial_example/data/Jurkat.RDS')
+counts = obj@assays$RNA@counts
+```
+
+## Preprocess the scRNA-seq data
+```{r,message = FALSE,warning = FALSE}
+# Create Seurat object
+sc_object <- CreateSeuratObject(count=counts, project = "sc_object", min.cells = 3)
+
+# Basic QC
+sc_object$percent.mt <- PercentageFeatureSet(sc_object, pattern = "^MT-")
+sc_object <- subset(sc_object, percent.mt<20)
+
+# Normalize, find HVGs and scale data
+sc_object <- NormalizeData(sc_object)
+sc_object <- FindVariableFeatures(sc_object, nfeatures=2000)
+sc_object <- ScaleData(sc_object)
+
+# Dimensionality reduction (50 PCs recommended to retain rare-cell structure)
+sc_object <- RunPCA(sc_object, npcs=50)
+sc_object <- RunUMAP(sc_object, dims=1:50)
+```
+
+## Run ConsensusRare
+```{r,message = FALSE,warning = FALSE}
+cluster <- ConsensusRare(sc_object,
+                         assay = 'RNA',               # Use RNA assay for default
+                         reduction = "pca",           # Use pca reduction
+                         dims = 1:50,
+                         k.param = 20,                # k = 20 typical in scRNA workflows
+                         k = 6,                       # k parameter for FindRare
+                         Q_cut = 0.6,                 # Q_cut parameter for FindRare
+                         ratio = 0.2,                 # ratio paramter for FindRare
+                         reps = 30                    # number of data reshuffling
+                         )
+```
+`reps` (default: 30) specifies the number of data reshuffling. Higher values improve stability at the cost of longer computation.
+
+`user_num` (optional) allows specifying the number of clusters to return directly. This is rarely needed and mainly used for special constraints or benchmarking.
+
+```{r}
+table(cluster)
+```
+
+```{r}
+sc_object$cluster = cluster
+```
+
+## Visualization
+```{r,message = FALSE,warning = FALSE}
+# Label cluster according to cluster size
+cluster.cnt <- sort(table(sc_object$cluster))
+sc_object$cluster_sort = factor(as.character(sc_object$cluster), levels = names(cluster.cnt),
+                                labels = 1:length(cluster.cnt), ordered = TRUE)
+
+# Define color palette for visualization
+cols <- c("#532C8A","#c19f70","#f9decf","#c9a997","#B51D8D","#9e6762","#3F84AA","#F397C0",
+          "#C594BF","#DFCDE4","#eda450","#635547","#C72228","#EF4E22","#f77b59","#989898",
+          "#7F6874","#8870ad","#65A83E","#EF5A9D","#647a4f","#FBBE92","#354E23","#139992",
+          "#C3C388","#8EC792","#0F4A9C","#8DB5CE","#1A1A1A","#FACB12","#C9EBFB","#DABE99",
+          "#ed8f84","#005579","#CDE088","#BBDCA8","#F6BFCB"
+)
+
+getPalette = colorRampPalette(cols[c(2,3,1,5,6,7,8,9,11,12,13,14,16,18,19,20,22,23,24,27,28,29,30,31,34)])
+
+# UMAP visualization of RareQ-identified clusters
+DimPlot(sc_object, group.by='cluster_sort') +
+  scale_color_manual(values = getPalette(length(unique(sc_object$cluster_sort))))
+```
