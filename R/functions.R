@@ -83,7 +83,7 @@ CreateObject <- function(embed.matrix, assay.name='RNA', dims=NULL, k.param=20){
 #' @examples
 #'
 ComputeQ <- function(sc_object, assay='RNA', k=6){
-  assay.all <- Assays(sc_object)
+  assay.all <- Seurat::Assays(sc_object)
   if(!assay %in% assay.all){
     stop(paste0("The ", assay," assay does not exist. Please choose from ", assay.all))
   }
