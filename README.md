@@ -24,7 +24,7 @@ Example [Jurkat](https://github.com/fabotao/RareQ/blob/main/data/Jurkat.RDS) scR
   library(Seurat) 
   
   # Read example data
-  obj = readRDS('Jurkat.RDS)  # Example data from data folder
+  obj = readRDS('Jurkat.RDS')  # Example data from data folder
   counts = obj@assays$RNA@counts
   
   # Preprocessing scRNA-seq data
